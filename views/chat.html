@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#4f46e5">
+    <title>SoftSol Support | Live Chat</title>
+    <link rel="icon" href="/icon.png" type="image/png" sizes="32x32">
+    <link href="/output.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+
+    <script async crossorigin="anonymous"
+        data-clerk-publishable-key="pk_test_aG9wZWZ1bC1taW5ub3ctMTAuY2xlcmsuYWNjb3VudHMuZGV2JA"
+        src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@latest/dist/clerk.browser.js" type="text/javascript">
+        </script>
+
+    <style>
+        /* Force remove all focus outlines from the chat input */
+        #chat-input:focus {
+            outline: none !important;
+            border: none !important;
+            box-shadow: none !important;
+        }
+
+        /* Custom scrollbar for chat box */
+        #chat-box::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        #chat-box::-webkit-scrollbar-thumb {
+            background: #e2e8f0;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+
+<body class="bg-slate-50 h-[100dvh] flex flex-col antialiased overflow-hidden">
+
+    <nav
+        class="bg-white border-b border-slate-200 px-4 py-3 md:px-6 md:py-4 flex items-center justify-between shadow-sm sticky top-0 z-50">
+        <div class="flex items-center gap-3 min-w-0 flex-1">
+            <div id="user-image-container" class="shrink-0">
+                <img id="user-photo" src=""
+                    class="w-10 h-10 rounded-xl object-cover shadow-sm border border-slate-100 hidden">
+                <div id="user-initial"
+                    class="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-bold text-lg">
+                    U</div>
+            </div>
+            <div class="min-w-0">
+                <h1 id="user-name-display" class="font-bold text-slate-900 truncate text-sm md:text-base">Loading...
+                </h1>
+                <div id="connection-status"
+                    class="text-[10px] text-slate-400 font-medium uppercase tracking-wider flex items-center gap-1">
+                    <span id="status-dot"
+                        class="w-1.5 h-1.5 bg-slate-300 rounded-full transition-colors duration-500"></span>
+                    <span id="status-text">Connecting...</span>
+                </div>
+            </div>
+        </div>
+        <div class="flex items-center gap-2">
+            <a href="/Profile"
+                class="p-2.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all">
+                <i class="fas fa-user-cog text-lg"></i>
+            </a>
+            <button id="logout-btn"
+                class="p-2.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all">
+                <i class="fas fa-sign-out-alt text-lg"></i>
+            </button>
+        </div>
+    </nav>
+
+    <main id="chat-box" class="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 scroll-smooth bg-slate-50"></main>
+
+    <footer class="bg-white border-t border-slate-200 p-3 md:p-4 shadow-lg">
+        <div class="max-w-4xl mx-auto space-y-3">
+
+            <div id="file-status" class="flex flex-wrap gap-2"></div>
+
+            <div class="flex items-end gap-2 bg-slate-50 border border-slate-200 rounded-2xl p-1.5 transition-all">
+                <div class="flex items-center">
+                    <label class="p-2.5 text-slate-400 hover:text-indigo-600 cursor-pointer">
+                        <i class="fas fa-paperclip text-lg"></i>
+                        <input type="file" id="file-input" class="hidden" multiple>
+                    </label>
+                </div>
+
+                <textarea id="chat-input" rows="1" placeholder="Type a message..."
+                    class="w-full bg-transparent border-none focus:ring-0 focus:outline-none outline-none shadow-none text-slate-700 py-2.5 px-2 resize-none max-h-32 text-sm"></textarea>
+
+                <button id="send-btn"
+                    class="bg-indigo-600 text-white w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-lg active:scale-95 transition-transform">
+                    <i class="fas fa-paper-plane text-sm"></i>
+                </button>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(reg => console.log('PWA active for SoftSol'))
+                    .catch(err => console.log('PWA registration failed', err));
+            });
+        }
+    </script>
+
+    <script src="/socket.io/socket.io.js"></script>
+
+    <script>
+        // Initialize Socket immediately
+        const socket = io();
+        let currentUser = null;
+
+        // Request notification permission
+        if (Notification.permission !== "granted" && Notification.permission !== "denied") {
+            Notification.requestPermission();
+        }
+
+        // 1. Initialize App & Clerk
+        async function initApp() {
+            try {
+                await Clerk.load();
+
+                if (!Clerk.user) {
+                    window.location.replace('/');
+                    return;
+                }
+
+                // Set Global User Data
+                currentUser = {
+                    id: Clerk.user.id,
+                    name: Clerk.user.firstName || "User",
+                    image: Clerk.user.imageUrl
+                };
+
+                // --- FIX: Update Header UI with correct IDs ---
+                const nameDisplay = document.getElementById('user-name-display');
+                const photoDisplay = document.getElementById('user-photo');
+                const initialDisplay = document.getElementById('user-initial');
+
+                if (nameDisplay) nameDisplay.innerText = currentUser.name;
+
+                if (currentUser.image && photoDisplay) {
+                    photoDisplay.src = currentUser.image;
+                    photoDisplay.classList.remove('hidden'); // Show the image
+                    if (initialDisplay) initialDisplay.classList.add('hidden'); // Hide the "U"
+                }
+
+                // Join the Socket Room
+                socket.emit('join-chat', currentUser.id);
+
+                // Initialize Controls
+                setupChatControls();
+
+            } catch (err) {
+                console.error("Initialization Error:", err);
+            }
+        }
+
+        function updateFilePreview() {
+            const fileInput = document.getElementById('file-input');
+            const statusDiv = document.getElementById('file-status');
+            const allFiles = [...fileInput.files];
+            statusDiv.innerHTML = '';
+
+            allFiles.forEach((file) => {
+                const pill = document.createElement('div');
+                pill.className = "inline-flex items-center bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full text-[11px] font-semibold border border-indigo-100 animate-in fade-in zoom-in duration-200";
+                pill.innerHTML = `<i class="fas fa-file-alt mr-1.5 opacity-70"></i><span class="truncate max-w-[150px]">${file.name}</span>`;
+                statusDiv.appendChild(pill);
+            });
+        }
+
+        function setupChatControls() {
+            const chatInput = document.getElementById('chat-input');
+            const sendBtn = document.getElementById('send-btn');
+            const fileInput = document.getElementById('file-input');
+
+            fileInput.addEventListener('change', updateFilePreview);
+
+            const sendMessage = () => {
+                const text = chatInput.value.trim();
+                const files = [...fileInput.files];
+
+                if (!text && files.length === 0) return;
+
+                const messageMetadata = {
+                    userId: currentUser.id,
+                    userName: currentUser.name,
+                    userImage: currentUser.image,
+                    timestamp: new Date()
+                };
+
+                if (text) {
+                    socket.emit('send-to-admin', {
+                        ...messageMetadata,
+                        message: text,
+                        type: 'text'
+                    });
+                    appendBubble(text, true);
+                }
+
+                files.forEach(file => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        socket.emit('send-to-admin', {
+                            ...messageMetadata,
+                            fileName: file.name,
+                            fileData: e.target.result,
+                            type: 'file'
+                        });
+                        appendBubble(`📎 ${file.name}`, true);
+                    };
+                    reader.readAsDataURL(file);
+                });
+
+                chatInput.value = '';
+                fileInput.value = '';
+                document.getElementById('file-status').innerHTML = '';
+            };
+
+            sendBtn.onclick = sendMessage;
+            chatInput.onkeydown = (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                }
+            };
+        }
+
+        function appendBubble(text, isUser, timestamp = new Date()) {
+            const box = document.getElementById('chat-box');
+            if (!box) return;
+
+            // Format the timestamp
+            const timeStr = new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+            const div = document.createElement('div');
+            div.className = `flex ${isUser ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-2 duration-300 mb-4`;
+            div.innerHTML = `
+<div class="max-w-[85%] px-4 py-2.5 rounded-2xl text-sm shadow-sm ${isUser ? 'bg-indigo-600 text-white rounded-tr-none' : 'bg-white border text-slate-800 rounded-tl-none'}">
+    ${text}
+    <span class="text-[10px] block text-right mt-1 ${isUser ? 'text-indigo-200' : 'text-slate-400'}">${timeStr}</span>
+</div>`;
+            box.appendChild(div);
+            box.scrollTop = box.scrollHeight;
+        }
+
+        socket.on('connect', () => {
+            const dot = document.getElementById('status-dot');
+            const statusText = document.getElementById('status-text');
+            if (dot) {
+                dot.classList.remove('bg-slate-300');
+                dot.classList.add('bg-green-500');
+            }
+            if (statusText) statusText.innerText = "Online";
+        });
+
+        socket.on('receive-reply', (data) => {
+            if (data.sender === 'admin') {
+                let content = (data.type === 'file' || data.fileData)
+                    ? `<a href="${data.fileData}" download="${data.fileName}" class="underline font-bold">📎 ${data.fileName}</a>`
+                    : data.message;
+                appendBubble(content, false);
+
+                if (Notification.permission === "granted") {
+                    new Notification(`New Message from Soft Solution`, {
+                        body: data.message || "Sent an attachment",
+                        icon: "/icon.png"
+                    });
+                }
+            }
+        });
+
+        socket.on('chat-history', (history) => {
+            const box = document.getElementById('chat-box');
+            if (!box) return;
+            box.innerHTML = '';
+
+            const fragment = document.createDocumentFragment();
+            history.forEach(msg => {
+                const isAdmin = msg.sender === 'admin';
+                const div = document.createElement('div');
+                div.className = `flex ${isAdmin ? 'justify-start' : 'justify-end'} mb-4`;
+
+                let contentHTML = "";
+                if (msg.type === 'file' || msg.fileData) {
+                    const fileLink = `<a href="${msg.fileData}" download="${msg.fileName}" class="underline font-bold block">📎 ${msg.fileName}</a>`;
+                    contentHTML = msg.message ? `<p class="mb-1">${msg.message}</p>${fileLink}` : fileLink;
+                } else {
+                    contentHTML = msg.message;
+                }
+
+                div.innerHTML = `
+            <div class="max-w-[85%] px-4 py-2.5 rounded-2xl text-sm shadow-sm ${!isAdmin ? 'bg-indigo-600 text-white rounded-tr-none' : 'bg-white border text-slate-800 rounded-tl-none'}">
+                ${contentHTML}
+            </div>`;
+                fragment.appendChild(div);
+            });
+
+            box.appendChild(fragment);
+            box.scrollTop = box.scrollHeight;
+        });
+
+        document.getElementById('logout-btn').onclick = () => Clerk.signOut();
+        window.addEventListener('load', initApp);
+    </script>
+
+</body>
+
+</html>

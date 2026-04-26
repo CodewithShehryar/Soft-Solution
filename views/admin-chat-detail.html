@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#4f46e5">
+    <title>Admin Support | Live Chat</title>
+    <link href="/output.css" rel="stylesheet">
+    <link rel="icon" href="/icon.png" type="image/png" sizes="32x32">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        #chat-messages {
+            scrollbar-width: thin;
+            scroll-behavior: smooth;
+        }
+
+        /* Hide scrollbar for Chrome/Safari */
+        #chat-messages::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        #chat-messages::-webkit-scrollbar-thumb {
+            background: #e2e8f0;
+            border-radius: 10px;
+        }
+
+        .preview-animation {
+            animation: scaleIn 0.2s ease-out;
+        }
+
+        @keyframes scaleIn {
+            from {
+                transform: scale(0.9);
+                opacity: 0;
+            }
+
+            to {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+
+<body class="bg-slate-50 h-[100dvh] flex flex-col antialiased overflow-hidden">
+
+    <header class="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between shadow-sm shrink-0">
+        <div class="flex items-center gap-3 min-w-0">
+            <button onclick="window.close()" class="text-slate-400 p-1 active:text-indigo-600">
+                <i class="fas fa-arrow-left text-lg"></i>
+            </button>
+            <div class="flex items-center gap-2 min-w-0">
+                <img id="user-img" src="" class="w-9 h-9 rounded-full border border-slate-200 object-cover shrink-0">
+                <div class="min-w-0">
+                    <h1 id="user-name" class="font-bold text-slate-900 text-sm md:text-base truncate">Loading...</h1>
+                    <div class="flex items-center gap-1.5">
+                        <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                        <span id="user-id-display"
+                            class="text-[10px] text-slate-400 font-mono truncate uppercase"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main id="chat-messages" class="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
+    </main>
+
+    <footer class="bg-white border-t border-slate-200 p-3 pb-safe shadow-[0_-4px_10px_rgba(0,0,0,0.03)]">
+        <div class="max-w-5xl mx-auto">
+
+            <div id="staged-container"
+                class="hidden flex flex-wrap gap-2 mb-3 p-2 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+            </div>
+
+            <div class="flex items-end gap-2">
+                <input type="file" id="file-input" class="hidden" multiple onchange="stageFiles(this)">
+
+                <button onclick="document.getElementById('file-input').click()"
+                    class="bg-slate-100 hover:bg-slate-200 text-slate-500 w-11 h-11 shrink-0 rounded-full flex items-center justify-center transition-transform active:scale-90">
+                    <i class="fas fa-paperclip text-lg"></i>
+                </button>
+
+                <div class="flex-1 relative">
+                    <textarea id="chat-input" rows="1" placeholder="Type a message..."
+                        class="w-full border border-slate-200 rounded-2xl px-4 py-2.5 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50 transition-all resize-none block text-[16px]"
+                        style="max-height: 120px;"></textarea>
+                </div>
+
+                <button id="send-btn"
+                    class="bg-indigo-600 hover:bg-indigo-700 text-white w-11 h-11 shrink-0 rounded-full flex items-center justify-center shadow-md transition-all active:scale-90">
+                    <i class="fas fa-paper-plane text-sm"></i>
+                </button>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(reg => console.log('PWA active for SoftSol'))
+                    .catch(err => console.log('PWA registration failed', err));
+            });
+        }
+    </script>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const urlParams = new URLSearchParams(window.location.search);
+        const targetUserId = urlParams.get('userId');
+        let chatHistory = [];
+        let stagedFiles = []; // Array to hold files before sending
+
+        // UI Selectors
+        const tx = document.getElementById('chat-input');
+        const stagedContainer = document.getElementById('staged-container');
+
+        // Auto-expand textarea
+        tx.addEventListener("input", function () {
+            this.style.height = "auto";
+            this.style.height = (this.scrollHeight) + "px";
+        });
+
+        // Join the specific user's chat room
+        // Join the specific user's chat room
+        socket.emit('join-chat', targetUserId);
+
+        // This is the CRITICAL part for reloads
+        socket.on('chat-history', (history) => {
+            // Sync the local history array with the server's database records
+            chatHistory = history;
+
+            // Update the profile header using the first user message found in history
+            if (history.length > 0) {
+                const userInfo = history.find(m => m.sender === 'user') || history[0];
+                updateProfileHeader(userInfo);
+            }
+
+            // Trigger the UI to draw all messages from the array
+            renderMessages();
+        });
+
+        // Listen for incoming messages while the page is open
+        socket.on('new-user-message', (data) => {
+            if (data.userId === targetUserId) {
+                chatHistory.push({ ...data, sender: 'user' });
+                renderMessages();
+            }
+        });
+
+        function updateProfileHeader(data) {
+            const userName = data.userName || "User";
+            document.getElementById('user-name').innerText = userName;
+            document.getElementById('user-id-display').innerText = `ID: ${targetUserId}`;
+            const imgElement = document.getElementById('user-img');
+            const hasValidImage = data.userImage && data.userImage !== "null" && data.userImage !== "";
+            imgElement.src = hasValidImage ? data.userImage : `https://ui-avatars.com/api/?name=${encodeURIComponent(userName)}&background=6366f1&color=fff&bold=true`;
+        }
+
+        // --- STAGING LOGIC ---
+
+        async function stageFiles(input) {
+            const files = Array.from(input.files);
+            if (!files.length) return;
+
+            for (const file of files) {
+                const dataUrl = await readFileAsDataURL(file);
+                stagedFiles.push({ name: file.name, data: dataUrl, type: file.type });
+            }
+
+            renderStagedFiles();
+            input.value = ''; // Clear input so same file can be selected again
+        }
+
+        function renderStagedFiles() {
+            const statusDiv = document.getElementById('staged-container');
+            if (stagedFiles.length === 0) {
+                statusDiv.classList.add('hidden');
+                return;
+            }
+
+            statusDiv.classList.remove('hidden');
+            statusDiv.innerHTML = ''; // Clear existing
+
+            stagedFiles.forEach((file, index) => {
+                const pill = document.createElement('div');
+                // matching the chat.html styling exactly
+                pill.className = "inline-flex items-center bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full text-[11px] font-semibold border border-indigo-100 animate-in fade-in zoom-in duration-200 relative";
+
+                pill.innerHTML = `
+            <i class="fas fa-file-alt mr-1.5 opacity-70"></i>
+            <span class="truncate max-w-[150px]">${file.name}</span>
+            <button onclick="removeStaged(${index})" class="ml-2 hover:text-red-500">
+                <i class="fas fa-times"></i>
+            </button>`;
+                statusDiv.appendChild(pill);
+            });
+        }
+
+        function removeStaged(index) {
+            stagedFiles.splice(index, 1);
+            renderStagedFiles();
+        }
+
+        function readFileAsDataURL(file) {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = (e) => resolve(e.target.result);
+                reader.readAsDataURL(file);
+            });
+        }
+
+        // --- SEND LOGIC ---
+
+        async function handleSend() {
+            const text = tx.value.trim();
+            if (!text && stagedFiles.length === 0) return;
+
+            // Find existing info to maintain consistency
+            const userInfo = chatHistory.find(m => m.sender === 'user') || {};
+            const messageMetadata = {
+                userId: targetUserId,
+                userName: userInfo.userName,
+                userImage: userInfo.userImage,
+                timestamp: new Date(),
+                sender: 'admin'
+            };
+
+            // 1. If there is ONLY text (no files)
+            if (text && stagedFiles.length === 0) {
+                const payload = { ...messageMetadata, message: text, type: 'text' };
+                socket.emit('admin-reply', payload);
+                chatHistory.push(payload);
+            }
+
+            // 2. If there are files (the text acts as a caption for the files)
+            else if (stagedFiles.length > 0) {
+                stagedFiles.forEach(file => {
+                    const payload = {
+                        ...messageMetadata,
+                        message: text, // This sends the text as a caption with the file
+                        fileName: file.name,
+                        fileData: file.data,
+                        type: 'file'
+                    };
+                    socket.emit('admin-reply', payload);
+                    chatHistory.push(payload);
+                });
+            }
+
+            // --- RESET UI ---
+            stagedFiles = [];
+            tx.value = '';
+            tx.style.height = "auto"; // Reset height of auto-expanding textarea
+            renderStagedFiles();
+            renderMessages();
+        }
+
+        function renderMessages() {
+            const box = document.getElementById('chat-messages');
+            if (!box) return;
+            box.innerHTML = '';
+
+            chatHistory.forEach(msg => {
+                const isMe = msg.sender === 'admin';
+                const div = document.createElement('div');
+                div.className = `flex ${isMe ? 'justify-end' : 'justify-start'} mb-4 animate-in slide-in-from-bottom-2 duration-300`;
+
+                let contentHTML = '';
+
+                // Check if message is a file to make it downloadable
+                if (msg.type === 'file' || msg.fileData) {
+                    const fileLink = `<a href="${msg.fileData}" download="${msg.fileName}" class="underline font-bold block">📎 ${msg.fileName}</a>`;
+                    // If there is a caption (msg.message), show it above the link
+                    contentHTML = msg.message ? `<p class="mb-1">${msg.message}</p>${fileLink}` : fileLink;
+                } else {
+                    // Standard text message
+                    contentHTML = `<p class="whitespace-pre-wrap break-words">${msg.message}</p>`;
+                }
+
+                div.innerHTML = `
+            <div class="max-w-[85%] px-4 py-2.5 rounded-2xl text-sm shadow-sm ${isMe ? 'bg-indigo-600 text-white rounded-tr-none' : 'bg-white border border-slate-200 text-slate-800 rounded-tl-none'
+                    }">
+                ${contentHTML}
+            </div>`;
+                box.appendChild(div);
+            });
+            box.scrollTop = box.scrollHeight;
+        }
+
+        document.getElementById('send-btn').onclick = handleSend;
+        tx.onkeydown = (e) => {
+            if (e.key === 'Enter' && !e.shiftKey && window.innerWidth > 768) {
+                e.preventDefault();
+                handleSend();
+            }
+        };
+    </script>
+</body>
+
+</html>

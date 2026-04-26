@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#4f46e5">
+    <title>SoftSol Admin Panel</title>
+    <link href="/output.css" rel="stylesheet">
+    <link rel="icon" href="/icon.png" type="image/png" sizes="32x32">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script>
+        (function () {
+            if (sessionStorage.getItem('isAdmin') !== 'true') {
+                window.location.replace("/admin");
+            } else {
+                document.addEventListener("DOMContentLoaded", () => {
+                    document.body.style.visibility = "visible";
+                });
+            }
+        })();
+    </script>
+</head>
+
+<body class="bg-slate-50 text-slate-800 antialiased">
+
+    <header
+        class="lg:hidden bg-white border-b border-slate-200 px-4 py-4 flex justify-between items-center sticky top-0 z-50">
+        <span class="text-xl font-black text-indigo-600">SOFT<span class="text-slate-900">Admin</span></span>
+        <button id="mobile-toggle" class="p-2 text-slate-600">
+            <i class="fas fa-bars text-xl"></i>
+        </button>
+    </header>
+
+    <div class="flex min-h-screen">
+        <aside id="sidebar"
+            class="fixed inset-y-0 left-0 z-40 w-64 bg-slate-900 text-white transform -translate-x-full lg:translate-x-0 lg:static transition-transform duration-300">
+            <div class="p-6">
+                <span class="text-2xl font-black tracking-tighter">SOFT<span class="text-indigo-400">Admin</span></span>
+            </div>
+            <nav class="mt-4 px-4 space-y-2 h-[calc(100vh-150px)] flex flex-col">
+                <button onclick="showTab('chat')"
+                    class="tab-link w-full flex items-center gap-3 px-4 py-3 rounded-xl transition bg-indigo-600 text-white"
+                    id="tab-chat-link">
+                    <i class="fas fa-comments w-5"></i> Chat
+                </button>
+                <button onclick="showTab('users')"
+                    class="tab-link w-full flex items-center gap-3 px-4 py-3 rounded-xl transition text-slate-400 hover:bg-slate-800 hover:text-white"
+                    id="tab-users-link">
+                    <i class="fas fa-users w-5"></i> Users
+                </button>
+
+                <div class="mt-auto pb-4">
+                    <button onclick="handleLogout()"
+                        class="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition text-red-400 hover:bg-red-500/10 hover:text-red-300">
+                        <i class="fas fa-sign-out-alt w-5"></i> Logout
+                    </button>
+                </div>
+            </nav>
+        </aside>
+
+        <main class="flex-1 p-4 lg:p-10 min-w-0">
+            <h1 id="current-tab-title" class="text-2xl lg:text-3xl font-bold text-slate-900 mb-6 lg:mb-8">Chat Management</h1>
+
+            <section id="chat-content" class="tab-section h-[75vh] lg:h-[700px] flex flex-col lg:flex-row gap-4">
+                <div class="w-full lg:w-1/3 h-[40%] lg:h-full bg-white border border-slate-200 rounded-3xl overflow-hidden flex flex-col shadow-sm shrink-0">
+                    <div class="p-4 border-b font-bold bg-slate-50 flex justify-between items-center shrink-0">
+                        <span>Active Conversations</span>
+                        <span class="text-[10px] bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded-full"
+                            id="active-count">0</span>
+                    </div>
+                    <div id="admin-user-list" class="flex-1 overflow-y-auto divide-y divide-slate-100"></div>
+                </div>
+
+                <div
+                    class="flex-1 w-full h-[60%] lg:h-full bg-white border border-slate-200 rounded-3xl flex flex-col overflow-hidden shadow-sm">
+                    <div id="chat-profile-header"
+                        class="p-4 border-b bg-white hidden animate-in fade-in slide-in-from-top-2 shrink-0">
+                        <div class="flex items-center justify-between flex-wrap gap-2">
+                            <div class="flex items-center gap-3 min-w-0">
+                                <img id="header-user-img" src=""
+                                    class="w-10 h-10 rounded-full border border-slate-200 object-cover shrink-0">
+                                <div class="min-w-0 flex-1">
+                                    <h2 id="header-user-name" class="font-bold text-slate-900 leading-tight truncate">Select a
+                                        user</h2>
+                                    <p id="header-user-id" class="text-[10px] text-slate-400 font-mono truncate"></p>
+                                </div>
+                            </div>
+                            <a id="external-chat-link" href="#" target="_blank"
+                                class="text-xs font-bold text-indigo-600 hover:bg-indigo-50 px-3 py-2 rounded-xl transition flex items-center gap-2 shrink-0 whitespace-nowrap">
+                                <i class="fas fa-external-link-alt"></i> <span class="hidden sm:inline">Open Full Chat</span>
+                            </a>
+                        </div>
+                    </div>
+
+                    <div id="no-chat-selected"
+                        class="flex-1 flex flex-col items-center justify-center text-slate-400 p-6 lg:p-10 text-center">
+                        <i class="fas fa-comments text-4xl lg:text-5xl mb-4 opacity-20"></i>
+                        <p class="text-sm lg:text-base">Select a conversation from the left to start chatting</p>
+                    </div>
+
+                    <div id="admin-chat-messages" class="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50 hidden"></div>
+
+                    <div id="admin-input-area" class="p-3 lg:p-4 border-t flex gap-2 bg-white hidden shrink-0">
+                        <input type="text" id="admin-chat-input" placeholder="Type your reply..."
+                            class="flex-1 min-w-0 border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:border-indigo-500 transition text-sm lg:text-base">
+                        <button id="admin-send-btn"
+                            class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 lg:px-6 py-2.5 rounded-xl font-bold transition shadow-md active:scale-95 shrink-0 text-sm lg:text-base whitespace-nowrap">
+                            <i class="fas fa-paper-plane sm:mr-2"></i><span class="hidden sm:inline">Reply</span>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <section id="users-content" class="tab-section hidden">
+                <div class="mb-6 flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4">
+                    <h2 class="text-xl font-bold text-slate-800">Clerk User Database</h2>
+                    <div class="flex flex-col sm:flex-row gap-4 w-full lg:w-auto">
+                        <div class="relative flex-1 sm:w-64">
+                            <input type="text" id="user-search-input" placeholder="Search User by Info"
+                                class="w-full pl-12 pr-4 py-3 rounded-2xl border border-slate-200 outline-none focus:border-indigo-500 transition shadow-sm">
+                        </div>
+                        <button onclick="loadUsers()" id="reload-btn"
+                            class="flex items-center justify-center gap-2 bg-white border border-slate-200 px-6 py-3 rounded-2xl text-sm font-bold text-slate-600 hover:bg-slate-50 hover:text-indigo-600 transition shadow-sm shrink-0 whitespace-nowrap">
+                            <i class="fas fa-sync-alt" id="reload-icon"></i> Reload Users
+                        </button>
+                    </div>
+                </div>
+
+                <div class="bg-white border border-slate-200 rounded-3xl shadow-sm overflow-x-auto w-full">
+                    <table class="w-full text-left min-w-[650px]">
+                        <thead class="bg-slate-50 border-b">
+                            <tr>
+                                <th class="px-6 py-4 font-bold text-sm whitespace-nowrap">User</th>
+                                <th class="px-6 py-4 font-bold text-sm whitespace-nowrap">Contact & Company</th>
+                                <th class="px-6 py-4 font-bold text-sm whitespace-nowrap">Clerk ID</th>
+                                <th class="px-6 py-4 font-bold text-sm text-right whitespace-nowrap">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="user-table-body">
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(reg => console.log('PWA active for SoftSol'))
+                    .catch(err => console.log('PWA registration failed', err));
+            });
+        }
+    </script>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="admin-panel.js"></script>
+    
+</body>
+
+</html>
