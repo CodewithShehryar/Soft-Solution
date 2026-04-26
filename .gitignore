@@ -31,10 +31,6 @@ dist/
 build/
 out/
 
-# SSL Certificates (based on user files)
-key.pem
-cert.pem
-
 # Database/Storage
 *.sqlite
 dump.rdb
