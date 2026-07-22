@@ -14,23 +14,16 @@ const clerkClient = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY 
 const app = express();
 
 const server = http.createServer(app);
-key = (path.join(__dirname, 'views', 'key.pem'));
-cert = (path.join(__dirname, 'views', 'cert.pem'));
-// Read your SSL certificates
-const sslOptions = {
-    key: fs.readFileSync(key),
-    cert: fs.readFileSync(cert)
-};
-
-// Create HTTPS server
-//const server = https.createServer(sslOptions, app);
 
 const io = new Server(server, {
     maxHttpBufferSize: 1e8 // 100MB
 });
 
 // --- MONGODB CONNECTION ---
-const mongoURI = process.env.database_api; //"mongodb+srv://Matrix:Matrix@cluster0.bcbok8s.mongodb.net/SoftSolution?retryWrites=true&w=majority";
+const mongoURI = 'mongodb+srv://Matrix:Matrix@cluster0.bcbok8s.mongodb.net/?appName=Cluster0';
+
+const mongoURI = process.env.database_api;
+
 mongoose.connect(mongoURI)
     .then(() => console.log("✅ Connected to MongoDB: SoftSolution"))
     .catch(err => console.error("❌ MongoDB Connection Error:", err));
